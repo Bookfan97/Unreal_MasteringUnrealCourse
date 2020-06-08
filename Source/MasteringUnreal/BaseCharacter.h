@@ -8,6 +8,8 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "Components/ArrowComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Particles/ParticleSystemComponent.h"
+
 #include "BaseCharacter.generated.h"
 
 UCLASS()
@@ -32,21 +34,46 @@ public:
 
 	//Custom Character Declarations
 	UPROPERTY(EditDefaultsOnly, Category = "Base Character")
-		USpringArmComponent* SpringArm;
-	UPROPERTY(EditDefaultsOnly, Category = "Base Character")
-		UCameraComponent* Camera;
-	UPROPERTY(EditDefaultsOnly, Category = "Base Character")
-		UArrowComponent* ForwardDirection;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category= "Base Character")
-		bool bIsFiring;
+        USpringArmComponent *SpringArm;
 
+	UPROPERTY(EditDefaultsOnly, Category = "Base Character")
+        UCameraComponent *Camera;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Base Character")
+        UArrowComponent *ForwardDirection;
+	
+	UPROPERTY(EditDefaultsOnly, Category = "Base Character")
+    UParticleSystemComponent *ExplosionEffect;
+
+	//property for determining whether the firing action has been initiated -- used for animation
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Base Character")
+        bool bIsFiring;
+
+	//is character sprinting
+	UPROPERTY(EditDefaultsOnly, Category = "Base Character")
+        bool bIsSprinting;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Base Character")
+        float MaxSprint;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Base Character")
+        float BaseRunSpeed;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Base Character")
+        float TimeToMaxSpeed;
+
+	float CurrentSprint;
+	//Input Bindings
 	void MoveForward(float amount);
 	void MoveRight(float amount);
 	void RotateCamera(float amount);
 	void ChangeCameraHeight(float amount);
-
-	UFUNCTION(BlueprintCallable, Category= "Base Character")
-		void FireStart();
-	UFUNCTION(BlueprintCallable, Category= "Base Character")
+	void SprintStart();
+	void SprintEnd();
+	//we use two function to handle the firing animation
+	//so we can tie in to animations later
+	UFUNCTION(BlueprintCallable, Category = "Base Character")
+        void FireStart();
+	UFUNCTION(BlueprintCallable, Category = "Base Character")
         void Fired();
 };

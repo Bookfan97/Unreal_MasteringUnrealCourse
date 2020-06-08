@@ -1,25 +1,21 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "BaseCharacter.h"
-
-
-
 #include "DrawDebugHelpers.h"
 #include "Components/InputComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
-
 
 // Sets default values
 ABaseCharacter::ABaseCharacter()
 {
 	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
-	
+
 	//Spring Arm Setup
 	SpringArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("Spring Arm"));
 	SpringArm->bUsePawnControlRotation = false;
 	SpringArm->bAbsoluteRotation = true;
-	SpringArm->TargetArmLength = 1000.0f;
+	SpringArm->TargetArmLength = 1000.f;
 	SpringArm->SetupAttachment(RootComponent);
 
 	//Camera Setup
@@ -40,8 +36,21 @@ ABaseCharacter::ABaseCharacter()
 	bUseControllerRotationYaw = false;
 
 	//Allows character to walk up stairs
-	GetCharacterMovement()->SetWalkableFloorAngle(50.0f);
+	GetCharacterMovement()->SetWalkableFloorAngle(50.f);
 	GetCharacterMovement()->MaxStepHeight = 45.f;
+	ExplosionEffect = CreateDefaultSubobject<UParticleSystemComponent>(TEXT("Explosion Effect"));
+	ExplosionEffect->bAutoActivate = false;
+	ExplosionEffect->SetCollisionResponseToChannel(ECollisionChannel::ECC_Destructible, ECollisionResponse::ECR_Ignore);
+	JumpMaxHoldTime = 0.25f;
+	GetCharacterMovement()->AirControl = 0.5f;
+	GetCharacterMovement()->JumpZVelocity = 800.f;
+	GetCharacterMovement()->GravityScale = 2.0f;
+	JumpMaxCount = 2;
+	bIsSprinting = false;
+	BaseRunSpeed = 600.f;
+	MaxSprint = 2.0f;
+	CurrentSprint = 1.0f;
+	GetCharacterMovement()->MaxWalkSpeed = BaseRunSpeed;
 }
 
 // Called when the game starts or when spawned
@@ -56,6 +65,17 @@ void ABaseCharacter::BeginPlay()
 void ABaseCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+	float rampThisFrame = (DeltaTime / TimeToMaxSpeed) * MaxSprint;
+	if (bIsSprinting)
+	{
+		CurrentSprint += rampThisFrame;
+	}
+	else
+	{
+		CurrentSprint -= rampThisFrame;
+	}
+	CurrentSprint = FMath::Clamp(CurrentSprint, 1.f, MaxSprint);
+	GetCharacterMovement()->MaxWalkSpeed = BaseRunSpeed * CurrentSprint;
 }
 
 // Called to bind functionality to input
@@ -65,7 +85,10 @@ void ABaseCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 
 	//Bind action mappings
 	InputComponent->BindAction("Jump", EInputEvent::IE_Pressed, this, &ACharacter::Jump);
-	InputComponent->BindAction("Fire", EInputEvent::IE_Pressed, this, &ABaseCharacter::Fired);
+	InputComponent->BindAction("Jump", EInputEvent::IE_Released, this, &ACharacter::StopJumping);
+	InputComponent->BindAction("Fire", EInputEvent::IE_Pressed, this, &ABaseCharacter::FireStart);
+	InputComponent->BindAction("Sprint", EInputEvent::IE_Pressed, this, &ABaseCharacter::SprintStart);
+	InputComponent->BindAction("Sprint", EInputEvent::IE_Released, this, &ABaseCharacter::SprintEnd);
 
 	//Bind Axis mappings
 	InputComponent->BindAxis("ChangeCameraHeight", this, &ABaseCharacter::ChangeCameraHeight);
@@ -76,7 +99,7 @@ void ABaseCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 
 void ABaseCharacter::MoveForward(float amount)
 {
-	if(Controller && amount)
+	if (Controller && amount)
 	{
 		AddMovementInput(SpringArm->GetForwardVector(), amount);
 	}
@@ -84,7 +107,7 @@ void ABaseCharacter::MoveForward(float amount)
 
 void ABaseCharacter::MoveRight(float amount)
 {
-	if(Controller && amount)
+	if (Controller && amount)
 	{
 		AddMovementInput(SpringArm->GetRightVector(), amount);
 	}
@@ -92,53 +115,75 @@ void ABaseCharacter::MoveRight(float amount)
 
 void ABaseCharacter::RotateCamera(float amount)
 {
-	if(Controller && amount)
+	if (Controller && amount)
 	{
 		FVector rot = SpringArm->GetComponentRotation().Euler();
-		rot += FVector(0,0,amount);
+		rot += FVector(0, 0, amount);
 		SpringArm->SetWorldRotation(FQuat::MakeFromEuler(rot));
 	}
 }
 
 void ABaseCharacter::ChangeCameraHeight(float amount)
 {
-	if(Controller && amount)
+	if (Controller && amount)
 	{
 		FVector rot = SpringArm->GetComponentRotation().Euler();
 		float newHeight = rot.Y;
 		newHeight += amount;
 		newHeight = FMath::Clamp(newHeight, -45.f, -5.f);
-		rot= FVector(0, newHeight, rot.Z);
+		rot = FVector(0, newHeight, rot.Z);
 		SpringArm->SetWorldRotation(FQuat::MakeFromEuler(rot));
 	}
 }
 
+void ABaseCharacter::SprintStart()
+{
+	bIsSprinting = true;
+}
+
+void ABaseCharacter::SprintEnd()
+{
+	bIsSprinting = false;
+}
+
 void ABaseCharacter::FireStart()
 {
+	if (!bIsFiring)
+	{
+		bIsFiring = true;
+	}
+}
+
+void ABaseCharacter::Fired()
+{
+	if (!bIsFiring) return;
+	bIsFiring = false;
+	FVector HandLocation = GetMesh()->GetBoneLocation(FName("LeftHandMiddle1"));
+	if (ExplosionEffect)
+	{
+		ExplosionEffect->SetWorldLocation(HandLocation);
+		ExplosionEffect->Activate(true);
+	}
 	float distance = 10000;
 	FVector direction = ForwardDirection->GetForwardVector();
-	FVector start = GetActorLocation() + (direction *  60.f);
+	FVector start = HandLocation;
 	FVector end = start + (direction * distance);
 	FHitResult outHit;
 	bool HasHitSomething = GetWorld()->LineTraceSingleByChannel(outHit, start, end, ECollisionChannel::ECC_Destructible);
 	FColor color = FColor::MakeRandomColor();
-	if(HasHitSomething)
+	if (HasHitSomething)
 	{
 		DrawDebugLine(GetWorld(), start, outHit.ImpactPoint, color, true, 1.f, 0, 12.333);
-		if(!outHit.GetActor()->IsRootComponentMovable()) return;
+		if (!outHit.GetActor()->IsRootComponentMovable()) return;
 		TArray<UStaticMeshComponent*> Components;
 		outHit.GetActor()->GetComponents<UStaticMeshComponent>(Components);
-		for(auto &mesh : Components)
+		for (auto& mesh : Components)
 		{
-			mesh->AddForce(direction * 10000000);
+			mesh->AddForce(direction * 100000000.f);
 		}
 	}
 	else
 	{
 		DrawDebugLine(GetWorld(), start, end, color, true, 1.f, 0, 12.333);
 	}
-}
-
-void ABaseCharacter::Fired()
-{
 }
