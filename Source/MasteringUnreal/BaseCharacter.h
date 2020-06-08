@@ -37,4 +37,16 @@ public:
 		UCameraComponent* Camera;
 	UPROPERTY(EditDefaultsOnly, Category = "Base Character")
 		UArrowComponent* ForwardDirection;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category= "Base Character")
+		bool bIsFiring;
+
+	void MoveForward(float amount);
+	void MoveRight(float amount);
+	void RotateCamera(float amount);
+	void ChangeCameraHeight(float amount);
+
+	UFUNCTION(BlueprintCallable, Category= "Base Character")
+		void FireStart();
+	UFUNCTION(BlueprintCallable, Category= "Base Character")
+        void Fired();
 };
